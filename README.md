@@ -1,12 +1,12 @@
-# BigQuery ML Demo
-Getting started with BigQuery ML: a pragmatic approach on how to get started with Machine Learning on GCP via BigQuery
+# My very first BigQuery ML Demo
+Getting started with BigQuery ML: a pragmatic approach on how to get started with Machine Learning on GCP via BigQuery. This Demo will cover three use cases:
+- [Prediction via Time Forecasting](https://github.com/AndreUanKenobi/bqmldemo/edit/main/README.md#time-forecasting-example)
+- [Classification via Logistic Regression](https://github.com/AndreUanKenobi/bqmldemo/edit/main/README.md#logistic-regression-model)
+- [Unsupervised Anomaly Detection](https://github.com/AndreUanKenobi/bqmldemo/edit/main/README.md#unsupervised-anomaly-detection)
 
-## Getting started 
-[Log in to BigQuery](https://console.cloud.google.com/bigquery)
+Ready to get started? Let's [log in to BigQuery](https://console.cloud.google.com/bigquery)
 
-... that's it! 
-
-## Time Forecasting example
+## Time Forecasting
 [Reference](https://cloud.google.com/bigquery-ml/docs/arima-single-time-series-forecasting-tutorial)
 
 ### Step 1: Visualize the data
@@ -81,7 +81,7 @@ FROM
                      STRUCT(30 AS horizon, 0.8 AS confidence_level))
 ```
 
-## Logistic Regression Model
+## Classification via Logistic Regression
 [Reference](https://cloud.google.com/bigquery-ml/docs/logistic-regression-prediction)
 
 ### Step 1: Visualize the data
@@ -187,6 +187,81 @@ FROM
 ```
 
 
+## Unsupervised Anomaly Detection
+[Reference](https://cloud.google.com/blog/products/data-analytics/bigquery-ml-unsupervised-anomaly-detection)
+
+We will be using two different appraches: 
+- Machine Learning oriented, via K-Means
+- Deep Neural Networks oriented, via Autoencoders
+
+### Step 1: Visualize the data
+Run the following statement in BigQuery:
+```
+SELECT 
+  * 
+FROM 
+  `bigquery-public-data.ml_datasets.ulb_fraud_detection`
+  limit 100;
+```
+
+### Step 2: Create the model
+Using K-means:
+```
+CREATE MODEL `bqml_anomaly.my_kmeans_model`
+OPTIONS(
+  MODEL_TYPE = 'kmeans',
+  NUM_CLUSTERS = 8,
+  KMEANS_INIT_METHOD = 'kmeans++'
+) AS
+SELECT 
+  * EXCEPT(Time, Class) 
+FROM 
+  `bigquery-public-data.ml_datasets.ulb_fraud_detection`;
+
+```
+Using Autoencoder: 
+```
+CREATE MODEL `bqml_anomaly.my_autoencoder_model`
+OPTIONS(
+  model_type='autoencoder',
+  activation_fn='relu',
+  batch_size=8,
+  dropout=0.2,  
+  hidden_units=[32, 16, 4, 16, 32],
+  learn_rate=0.001,
+  l1_reg_activation=0.0001,
+  max_iterations=10,
+  optimizer='adam'
+) AS 
+SELECT 
+  * EXCEPT(Time, Class) 
+FROM 
+  `bigquery-public-data.ml_datasets.ulb_fraud_detection`;
+
+```
+
+### Step 3: Detecting anomalies
+Using K-means:
+```
+SELECT
+  *
+FROM
+  ML.DETECT_ANOMALIES(MODEL `bqml_anomaly.my_kmeans_model`,
+                      STRUCT(0.02 AS contamination),
+                      TABLE `bigquery-public-data.ml_datasets.ulb_fraud_detection`);
+```
+
+Using Autoencoder: 
+```
+SELECT
+  *
+FROM
+  ML.DETECT_ANOMALIES(MODEL `bqml_anomaly.my_autoencoder_model`,
+                      STRUCT(0.02 AS contamination),
+                      (SELECT * FROM `bigquery-public-data.ml_datasets.ulb_fraud_detection`));
+```
+
+Note: in both cases, the **contamination** parameter drives the anomaly cut-off
 
 ## Further Readings
 - [End-to-end user journey](https://cloud.google.com/bigquery-ml/docs/reference/standard-sql/bigqueryml-syntax-e2e-journey)
