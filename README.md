@@ -60,7 +60,7 @@ Several quality parameters are returned:
 - drift: think of it as an intercept
 - Akaike's Information Criterion (AIC): lower AIC values indicate a better-fit model
 
-### Step 4: Run predictions and explain them
+### Step 4: Run predictions and explain the model
 Run the following statement in BigQuery to create predictions:
 ```
 #standardSQL
@@ -81,8 +81,110 @@ FROM
                      STRUCT(30 AS horizon, 0.8 AS confidence_level))
 ```
 
+## Logistic Regression Model
+[Reference](https://cloud.google.com/bigquery-ml/docs/logistic-regression-prediction)
 
+### Step 1: Visualize the data
+Run the following statement in BigQuery:
+```
+SELECT 
+  *
+FROM
+  `bigquery-public-data.ml_datasets.census_adult_income`
+LIMIT
+  100;
+```
+### Step 2: Prepare the train, validation and prediction datasets
+Run the following statement in BigQuery:
+```
+CREATE OR REPLACE VIEW
+  `bqml_logreg.input_view` AS
+SELECT
+  age,
+  workclass,
+  native_country,
+  marital_status,
+  education_num,
+  occupation,
+  race,
+  hours_per_week,
+  income_bracket,
+  CASE
+    WHEN MOD(functional_weight, 10) < 8 THEN 'training'
+    WHEN MOD(functional_weight, 10) = 8 THEN 'evaluation'
+    WHEN MOD(functional_weight, 10) = 9 THEN 'prediction'
+  END AS dataframe
+FROM
+  `bigquery-public-data.ml_datasets.census_adult_income`
 
+```
+
+### Step 3: Create the model
+Run the following statement in BigQuery:
+```
+CREATE OR REPLACE MODEL
+  `bqml_logreg.census_model`
+OPTIONS
+  ( model_type='LOGISTIC_REG',
+    auto_class_weights=TRUE,
+    data_split_method='NO_SPLIT',
+    input_label_cols=['income_bracket'],
+    max_iterations=15) AS
+SELECT
+  * EXCEPT(dataframe)
+FROM
+  `bqml_logreg.input_view`
+WHERE
+  dataframe = 'training'
+
+```
+
+### Step 4: Evaluate the model
+Run the following statement in BigQuery:
+```
+SELECT
+  *
+FROM
+  ML.EVALUATE (MODEL `bqml_logreg.census_model`,
+    (
+    SELECT
+      *
+    FROM
+      `bqml_logreg.input_view`
+    WHERE
+      dataframe = 'evaluation'
+    )
+  )
+
+```
+
+Where:
+- Precision: True positives / (True Positivies + False Positives) 
+- Recall: True positives / (True positives + False negatives)
+
+_ _Precision can be seen as a measure of quality, and recall as a measure of quantity. Higher precision means that an algorithm returns more relevant results than irrelevant ones, and high recall means that an algorithm returns most of the relevant results (whether or not irrelevant ones are also returned)._ _
+
+- F1: ( Precision * Recall) / (Precision + Recall); it's a [harmonic mean](https://en.wikipedia.org/wiki/Harmonic_mean)
+- Log loss: log (product of all likelyhoods of predictions), the lower the better
+- [ROC_AUC](https://glassboxmedicine.files.wordpress.com/2019/02/roc-curve-v2.png?w=576): Area under ROC (Receiver operating characteristic) curve> the higher, the better
+
+### Step 5: Run predictions
+Run the following statement in BigQuery:
+```
+SELECT
+  *
+FROM
+  ML.PREDICT (MODEL `bqml_logreg.census_model`,
+    (
+    SELECT
+      *
+    FROM
+      `bqml_logreg.input_view`
+    WHERE
+      dataframe = 'prediction'
+     )
+  )
+```
 
 
 
